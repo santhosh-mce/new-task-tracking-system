@@ -705,3 +705,387 @@
   color: #111827;
   font-weight: 700;
 }
+
+/* ====================================================
+   ADMIN ATTENDANCE & BREAKS - RECENT LOGINS TABLE (MATCHING REFERENCE)
+   ==================================================== */
+
+.admin-att-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.admin-att-title-group h1 {
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.025em;
+  margin: 0 0 0.35rem;
+}
+
+.admin-att-title-group p {
+  font-size: 0.92rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.admin-att-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.admin-att-date-wrapper {
+  position: relative;
+}
+
+.admin-att-date-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.95rem;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.admin-att-date-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.admin-att-date-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.6rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  z-index: 40;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-att-date-option {
+  padding: 0.5rem 0.75rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.admin-att-date-option:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.admin-att-date-option.active {
+  background: #f0fdf4;
+  color: #166534;
+  font-weight: 700;
+}
+
+.admin-att-date-custom-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: #0f172a;
+  box-sizing: border-box;
+  margin-top: 4px;
+}
+
+.admin-att-search-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.admin-att-search-icon {
+  position: absolute;
+  left: 12px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.admin-att-search-input {
+  padding: 0.55rem 2.2rem 0.55rem 2.25rem;
+  width: 280px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  color: #0f172a;
+  outline: none;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-sizing: border-box;
+}
+
+.admin-att-search-input:focus {
+  border-color: #65a30d;
+  box-shadow: 0 0 0 3px rgba(101, 163, 13, 0.15);
+}
+
+.admin-att-search-clear {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-att-search-clear:hover {
+  color: #334155;
+}
+
+/* Tagline pill */
+.admin-att-tagline {
+  margin-bottom: 1.15rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.admin-att-tagline .tag-green {
+  color: #16a34a;
+}
+
+.admin-att-tagline .tag-dot {
+  color: #94a3b8;
+}
+
+.admin-att-tagline .tag-gray {
+  color: #64748b;
+  font-weight: 550;
+}
+
+/* Clean Table Card matching reference */
+.admin-att-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+}
+
+.admin-att-table-wrapper {
+  overflow-x: auto;
+}
+
+.admin-att-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.admin-att-table th {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.admin-att-table td {
+  padding: 1.15rem 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.88rem;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.admin-att-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-att-table tr:hover td {
+  background-color: #fafbfc;
+}
+
+/* User cell */
+.admin-att-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.admin-att-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 750;
+  color: #1e293b;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.admin-att-user-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-att-user-name {
+  font-size: 0.94rem;
+  font-weight: 750;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.admin-att-user-email {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+/* Staff ID cell */
+.admin-att-staff-id {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Role Pills */
+.admin-att-role-pill {
+  display: inline-block;
+  padding: 0.22rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.admin-att-role-pill.employee {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.admin-att-role-pill.intern {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+/* Department cell */
+.admin-att-dept {
+  font-weight: 550;
+  color: #0f172a;
+  font-size: 0.88rem;
+}
+
+/* Last Login cell */
+.admin-att-login-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-att-login-time {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 0.88rem;
+}
+
+.admin-att-login-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  color: #64748b;
+  font-weight: 550;
+}
+
+.admin-att-login-sub.green {
+  color: #15803d;
+}
+
+.admin-att-login-sub .sub-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.admin-att-login-sub .sub-dot.green {
+  background-color: #16a34a;
+}
+
+.admin-att-login-sub .sub-dot.gray {
+  background-color: #94a3b8;
+}
+
+/* Login Status Pill */
+.admin-att-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.admin-att-status-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.admin-att-status-pill.logged-in {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.admin-att-status-pill.logged-in .dot {
+  background: #16a34a;
+}
+
+.admin-att-status-pill.last-session {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.admin-att-status-pill.last-session .dot {
+  background: #94a3b8;
+}
+
+.admin-att-status-pill.never-logged-in {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px dashed #cbd5e1;
+}

@@ -13,6 +13,7 @@ from app.routers.attendance import router as attendance_router
 from app.routers.profile import router as profile_router
 from app.routers.employees import router as employees_router
 from app.routers.interns import router as interns_router
+from app.routers.notifications import router as notifications_router
 
 app = FastAPI(
     title="Task Tracking System API",
@@ -37,6 +38,7 @@ app.include_router(attendance_router)
 app.include_router(profile_router)
 app.include_router(employees_router)
 app.include_router(interns_router)
+app.include_router(notifications_router)
 
 
 @app.get("/")

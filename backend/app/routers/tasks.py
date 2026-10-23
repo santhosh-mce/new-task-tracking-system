@@ -206,18 +206,31 @@ def notify_user(
     message: str,
     task_id: int | None = None,
     link: str | None = None,
+    notification_type: str = "task",
+    event_id: str | None = None,
 ):
     try:
-        notif = Notification(
+        from app.services.notification_service import create_notification
+        user = db.query(User).filter(User.id == user_id).first()
+        target_link = link
+        if not target_link:
+            if user and user.role in ("employee", "intern"):
+                target_link = "/dashboard"
+            else:
+                target_link = f"/admin/tasks?task_id={task_id}" if task_id else "/admin/tasks"
+
+        create_notification(
+            db=db,
             user_id=user_id,
             title=title,
             message=message,
+            notification_type=notification_type,
             task_id=task_id,
-            link=link or (f"/admin/tasks?task_id={task_id}" if task_id else "/admin/tasks"),
+            link=target_link,
+            event_id=event_id,
         )
-        db.add(notif)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[tasks.notify_user] error: {exc}")
 
 
 @router.get("/summary", response_model=TaskSummaryCounts)
@@ -1077,6 +1090,8 @@ def update_task_progress(
     comment_parts = [f"Progress updated from {old_progress}% to {task.progress}%"]
     if task.status != old_status:
         comment_parts.append(f"status moved from '{old_status}' to '{task.status}'")
+        from app.services.notification_service import notify_task_status_changed
+        notify_task_status_changed(db, task, current_user, old_status, task.status)
     if payload.comment:
         comment_parts.append(f"Note: {payload.comment.strip()}")
 

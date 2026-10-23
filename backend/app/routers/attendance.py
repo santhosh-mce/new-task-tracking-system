@@ -31,6 +31,7 @@ from app.schemas.attendance import (
     CorrectionResponse,
     CorrectionReviewRequest,
     MonthlyStaffAttendanceSummary,
+    RecentLoginStaffItem,
     TodayAttendanceStatus,
 )
 from app.services.attendance_service import (
@@ -266,6 +267,13 @@ def request_correction(
     db.commit()
     db.refresh(correction)
 
+    try:
+        from app.services.notification_service import notify_attendance_correction
+        notify_attendance_correction(db, correction, current_user)
+        db.commit()
+    except Exception as exc:
+        print(f"[attendance] notification error: {exc}")
+
     return CorrectionResponse(
         id=correction.id,
         user_id=current_user.id,
@@ -443,6 +451,13 @@ def review_correction(
     db.commit()
     db.refresh(correction)
 
+    try:
+        from app.services.notification_service import notify_attendance_correction_decision
+        notify_attendance_correction_decision(db, correction, current_user)
+        db.commit()
+    except Exception as exc:
+        print(f"[attendance] notification error: {exc}")
+
     return CorrectionResponse(
         id=correction.id,
         user_id=correction.user_id,
@@ -504,6 +519,136 @@ def list_admin_records(
         department=department,
         status_filter=status_filter,
     )
+
+
+@router.get("/admin/recent-logins", response_model=list[RecentLoginStaffItem])
+def get_recent_logins(
+    q: str | None = None,
+    department: str | None = None,
+    role: str | None = None,
+    date: date | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can access recent staff login records.",
+        )
+
+    users = (
+        db.query(User)
+        .filter(
+            User.role.in_(("employee", "intern")),
+            User.status.in_(("active", "invitation_pending")),
+        )
+        .all()
+    )
+
+    if not users:
+        return []
+
+    user_ids = [u.id for u in users]
+
+    profiles = db.query(StaffProfile).filter(StaffProfile.user_id.in_(user_ids)).all()
+    profile_map = {p.user_id: p for p in profiles}
+
+    sessions = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.user_id.in_(user_ids))
+        .order_by(AttendanceSession.check_in.desc())
+        .all()
+    )
+
+    latest_session_map: dict[int, AttendanceSession] = {}
+    for s in sessions:
+        if s.user_id not in latest_session_map:
+            latest_session_map[s.user_id] = s
+
+    policy = get_default_policy(db)
+    today = local_now(policy).date()
+
+    results: list[RecentLoginStaffItem] = []
+
+    for user in users:
+        prof = profile_map.get(user.id)
+        staff_id = (
+            prof.staff_id
+            if prof and prof.staff_id
+            else f"{'INT' if user.role == 'intern' else 'EMP'}-{user.id:04d}"
+        )
+        dept = (prof.department if prof and prof.department else "Ingage")
+        photo = prof.profile_photo if prof else None
+
+        sess = latest_session_map.get(user.id)
+        last_login = sess.check_in if sess else None
+        source = sess.source if sess else None
+
+        if sess is None:
+            login_status = "Never logged in"
+            is_active = False
+        else:
+            sess_date = to_business_date(sess.check_in, policy)
+            if sess.check_out is None and sess_date == today:
+                login_status = "Logged in"
+                is_active = True
+            else:
+                login_status = "Last session"
+                is_active = False
+
+        if department and dept.lower() != department.strip().lower():
+            continue
+
+        if role and role != "All" and user.role.lower() != role.strip().lower():
+            continue
+
+        if date:
+            if not last_login or to_business_date(last_login, policy) != date:
+                continue
+
+        if date_from and date_to:
+            if not last_login:
+                continue
+            sess_date = to_business_date(last_login, policy)
+            if sess_date < date_from or sess_date > date_to:
+                continue
+
+        if q:
+            term = q.strip().lower()
+            name_match = bool(user.full_name and term in user.full_name.lower())
+            email_match = bool(term in user.email.lower())
+            id_match = bool(staff_id and term in staff_id.lower())
+            dept_match = bool(dept and term in dept.lower())
+            if not (name_match or email_match or id_match or dept_match):
+                continue
+
+        results.append(
+            RecentLoginStaffItem(
+                user_id=user.id,
+                full_name=user.full_name or "Staff Member",
+                email=user.email,
+                role=user.role,
+                staff_id=staff_id,
+                department=dept,
+                profile_photo=photo,
+                last_login=last_login,
+                login_status=login_status,
+                is_active_session=is_active,
+                source=source,
+            )
+        )
+
+    results.sort(
+        key=lambda item: (
+            item.last_login is not None,
+            item.last_login or datetime.min.replace(tzinfo=timezone.utc),
+        ),
+        reverse=True,
+    )
+
+    return results
 
 
 @router.get("/admin/monthly-report", response_model=list[MonthlyStaffAttendanceSummary])

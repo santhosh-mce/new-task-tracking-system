@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import {
+  Bell,
   Briefcase,
   ClipboardList,
   LayoutDashboard,
@@ -8,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
-import "../layouts/AdminLayout.css";
+import "./EmployeeSidebar.css";
 
 export default function EmployeeSidebar({
   activeView,
@@ -65,28 +66,35 @@ export default function EmployeeSidebar({
   return (
     <>
       <div
-        className={`admin-backdrop${open ? " is-visible" : ""}`}
+        className={`taskflow-sidebar-backdrop${open ? " is-visible" : ""}`}
         aria-hidden="true"
         onClick={onClose}
       />
       <aside
         ref={sidebarRef}
-        className={`admin-sidebar${open ? " is-open" : ""}`}
+        className={`taskflow-sidebar${open ? " is-open" : ""}`}
         aria-label="Staff sidebar"
       >
-        <div className="admin-sidebar-brand-row">
-          <Link to="/dashboard" className="admin-brand" onClick={onClose}>
-            <span className="admin-brand-mark" aria-hidden="true">
-              <span />
-            </span>
-            <span>
-              TaskFlow <i>·</i> {roleLabel}
-            </span>
+        {/* Brand Header */}
+        <div className="taskflow-sidebar-header">
+          <Link
+            to="/dashboard"
+            className="taskflow-sidebar-brand"
+            onClick={() => {
+              onSelectView("dashboard");
+              if (onClose) onClose();
+            }}
+          >
+            <div className="taskflow-brand-logo-icon">
+              <span>TF</span>
+            </div>
+            <span className="taskflow-brand-title">Ingage TaskFlow</span>
           </Link>
+
           <button
             ref={closeButtonRef}
             type="button"
-            className="admin-sidebar-close"
+            className="taskflow-sidebar-close"
             aria-label="Close navigation"
             onClick={onClose}
           >
@@ -94,70 +102,86 @@ export default function EmployeeSidebar({
           </button>
         </div>
 
-        <span className="admin-nav-caption">WORKSPACE MENU</span>
-        <nav className="admin-nav" aria-label="Staff navigation">
-          <ul className="admin-nav-list">
+        {/* Navigation List */}
+        <nav className="taskflow-sidebar-nav" aria-label="Staff navigation">
+          <ul className="taskflow-nav-list">
             {navigationItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === "/dashboard" && activeView === item.id;
+              const isActive =
+                location.pathname === "/dashboard" && activeView === item.id;
               return (
-                <li key={item.id} className="admin-nav-item">
+                <li key={item.id} className="taskflow-nav-item">
                   <button
                     type="button"
-                    className={`admin-nav-link${isActive ? " is-active" : ""}`}
+                    className={`taskflow-nav-btn${isActive ? " is-active" : ""}`}
                     onClick={() => {
                       onSelectView(item.id);
                       if (onClose) onClose();
                     }}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      background: isActive ? "var(--admin-lime, #65a30d)" : "transparent",
-                      border: "none",
-                      cursor: "pointer",
-                    }}
                   >
-                    <Icon size={18} aria-hidden="true" />
+                    <Icon size={19} aria-hidden="true" />
                     <span>{item.label}</span>
                   </button>
                 </li>
               );
             })}
 
-            {/* My Profile Link */}
-            <li className="admin-nav-item">
+            {/* Notifications Link */}
+            <li className="taskflow-nav-item">
               <Link
-                to="/profile"
-                className={`admin-nav-link${location.pathname === "/profile" || location.pathname === "/complete-profile" ? " is-active" : ""}`}
+                to="/notifications"
+                className={`taskflow-nav-btn${
+                  location.pathname === "/notifications" ? " is-active" : ""
+                }`}
                 onClick={onClose}
               >
-                <User size={18} aria-hidden="true" />
+                <Bell size={19} aria-hidden="true" />
+                <span>Notifications</span>
+              </Link>
+            </li>
+
+            {/* My Profile Link */}
+            <li className="taskflow-nav-item">
+              <Link
+                to="/profile"
+                className={`taskflow-nav-btn${
+                  location.pathname === "/profile" ||
+                  location.pathname === "/complete-profile"
+                    ? " is-active"
+                    : ""
+                }`}
+                onClick={onClose}
+              >
+                <User size={19} aria-hidden="true" />
                 <span>My Profile</span>
               </Link>
+            </li>
+
+            {/* Logout Nav Item */}
+            <li className="taskflow-nav-item">
+              <button
+                type="button"
+                className="taskflow-nav-btn taskflow-logout-btn"
+                onClick={onLogout}
+              >
+                <LogOut size={19} aria-hidden="true" />
+                <span>Logout</span>
+              </button>
             </li>
           </ul>
         </nav>
 
-        <div className="admin-sidebar-bottom">
-          <div className="admin-user-identity" style={{ padding: "12px 10px" }}>
-            <span className="admin-user-avatar" aria-hidden="true">
-              {(user?.full_name || "U").trim().charAt(0).toUpperCase()}
-            </span>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              <strong>{user?.full_name || "User"}</strong>
-              <small style={{ textTransform: "capitalize" }}>{roleLabel}</small>
-            </span>
+        {/* Brand Footer matching reference */}
+        <div className="taskflow-sidebar-footer">
+          <div className="taskflow-footer-brand">
+            <div className="taskflow-brand-logo-icon taskflow-footer-logo-icon">
+              <span>TF</span>
+            </div>
+            <div className="taskflow-footer-texts">
+              <strong>Ingage TaskFlow</strong>
+              <small>Work Smarter, Grow Together</small>
+            </div>
           </div>
-
-          <button
-            type="button"
-            className="admin-logout-btn"
-            onClick={onLogout}
-            style={{ marginTop: 8 }}
-          >
-            <LogOut size={16} aria-hidden="true" />
-            <span>Logout</span>
-          </button>
         </div>
       </aside>
     </>

@@ -188,3 +188,18 @@ class CorrectionResponse(BaseModel):
     reviewer_remarks: str | None = None
     reviewed_at: datetime | None = None
     created_at: datetime
+
+
+class RecentLoginStaffItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    user_id: int
+    full_name: str
+    email: str
+    role: str
+    staff_id: str | None = None
+    department: str | None = "Ingage"
+    profile_photo: str | None = None
+    last_login: datetime | None = None
+    login_status: str  # "Logged in", "Last session", "Never logged in"
+    is_active_session: bool = False
+    source: str | None = None

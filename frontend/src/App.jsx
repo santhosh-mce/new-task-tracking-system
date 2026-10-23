@@ -20,6 +20,7 @@ import CompleteProfilePage from "./pages/CompleteProfilePage.jsx";
 import ChangePasswordPage from "./pages/ChangePasswordPage.jsx";
 import EmployeesPage from "./pages/EmployeesPage.jsx";
 import InternsPage from "./pages/InternsPage.jsx";
+import NotificationsPage from "./pages/NotificationsPage.jsx";
 import AdminRoute from "./components/AdminRoute";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -128,6 +129,7 @@ export default function App() {
             <Route path="tasks/my-tasks" element={<MyTasksPage />} />
             <Route path="tasks/assign" element={<AssignTasksPage />} />
             <Route path="attendance" element={<AttendancePage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="reports" element={<AdminPlaceholder />} />
             <Route path="settings" element={<AdminPlaceholder />} />
           </Route>
@@ -155,8 +157,17 @@ export default function App() {
             <Route path="tasks/my-tasks" element={<MyTasksPage />} />
             <Route path="tasks/assign" element={<AssignTasksPage />} />
             <Route path="attendance" element={<AttendancePage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
           </Route>
 
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <NotificationsPage />
+              </ProtectedRoute>
+            }
+          />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -101,98 +101,25 @@ def create_invitation(
     user_full_name = (data.full_name or "").strip()
     user_dept = (data.department or "Ingage").strip()
 
-    if data.temporary_password:
+    import secrets
+    if data.temporary_password and data.temporary_password.strip():
         temp_pass = data.temporary_password.strip()
         if len(temp_pass) < 8:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Temporary password must be at least 8 characters long.",
             )
-        # Create user account securely in the database
-        user = User(
-            full_name=user_full_name,
-            email=email,
-            password_hash=hash_password(temp_pass),
-            role=data.role,
-            status="active",
-            must_change_password=True,
-            onboarding_status="pending",
-            profile_status="incomplete",
-        )
-        db.add(user)
-        db.flush()
+    else:
+        temp_pass = f"TaskFlow@{secrets.randbelow(900000) + 100000}"
 
-        prefix = {
-            "employee": "EMP",
-            "intern": "INT",
-            "team_lead": "TLD",
-            "manager": "MGR",
-        }.get(data.role, "STF")
-        custom_id = data.employee_id.strip() if data.employee_id else None
-        staff_id = custom_id or f"{prefix}-{user.id:04d}"
-
-        staff_category = {
-            "employee": StaffCategory.EMPLOYEE,
-            "team_lead": StaffCategory.EMPLOYEE,
-            "intern": StaffCategory.INTERN,
-            "manager": StaffCategory.MANAGER,
-        }.get(data.role)
-
-        profile = StaffProfile(
-            user_id=user.id,
-            staff_category=staff_category,
-            staff_id=staff_id,
-            employee_id=staff_id if data.role in ("employee", "team_lead") else None,
-            intern_id=staff_id if data.role == "intern" else None,
-            department=user_dept,
-        )
-        db.add(profile)
-
-        invitation.user_id = user.id
-        invitation.sent_at = now
-        invitation.status = "pending"
-        db.flush()
-
-        email_sent = True
-        message_note = None
-        try:
-            send_temporary_password_email(
-                email=email,
-                role=data.role,
-                temporary_password=temp_pass,
-            )
-        except InvitationEmailError as exc:
-            email_sent = False
-            message_note = f"User created, but email could not be sent: {exc}"
-
-        db.commit()
-        db.refresh(invitation)
-
-        return {
-            "id": invitation.id,
-            "email": invitation.email,
-            "role": invitation.role,
-            "status": "Pending",
-            "full_name": user.full_name,
-            "department": profile.department,
-            "staff_id": profile.staff_id,
-            "setup_link": None,
-            "email_sent": email_sent,
-            "message": message_note or "User account created successfully.",
-            "sent_at": invitation.sent_at,
-            "expires_at": invitation.expires_at,
-            "completed_at": invitation.completed_at,
-        }
-
-    # Setup Link flow (Default and recommended)
-    # 1. Pre-create the User with status='invitation_pending' and null password
+    # Create user account securely in the database
     user = User(
         full_name=user_full_name,
         email=email,
-        password_hash=None,
+        password_hash=hash_password(temp_pass),
         role=data.role,
-        status="invitation_pending",
-        must_change_password=False,
+        status="active",
+        must_change_password=True,
         onboarding_status="pending",
         profile_status="incomplete",
     )
@@ -225,30 +152,22 @@ def create_invitation(
     )
     db.add(profile)
 
-    token = generate_invitation_token()
     invitation.user_id = user.id
-    invitation.token_hash = hash_invitation_token(token)
     invitation.sent_at = now
-    invitation.expires_at = now + timedelta(minutes=5)  # 5 mins time-limited link
+    invitation.status = "pending"
     db.flush()
-
-    from urllib.parse import quote
-    import os
-    frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173").rstrip("/")
-    setup_link = f"{frontend_url}/register?token={quote(token, safe='')}"
 
     email_sent = True
     message_note = None
     try:
-        send_invitation_email(
-            email=invitation.email,
-            role=invitation.role,
-            token=token,
-            expires_at=invitation.expires_at,
+        send_temporary_password_email(
+            email=email,
+            role=data.role,
+            temporary_password=temp_pass,
         )
     except InvitationEmailError as exc:
         email_sent = False
-        message_note = f"User created in database, but setup email could not be sent: {exc}"
+        message_note = f"User created, but email could not be sent: {exc}"
 
     db.commit()
     db.refresh(invitation)
@@ -261,9 +180,9 @@ def create_invitation(
         "full_name": user.full_name,
         "department": profile.department,
         "staff_id": profile.staff_id,
-        "setup_link": setup_link,
+        "setup_link": None,
         "email_sent": email_sent,
-        "message": message_note or "User created and setup link generated successfully.",
+        "message": message_note or "User account created successfully and temporary credentials emailed.",
         "sent_at": invitation.sent_at,
         "expires_at": invitation.expires_at,
         "completed_at": invitation.completed_at,

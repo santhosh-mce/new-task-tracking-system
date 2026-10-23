@@ -87,6 +87,43 @@ class OnboardingWorkflowTests(unittest.TestCase):
         profile = self.db.query(StaffProfile).filter(StaffProfile.user_id == user.id).first()
         self.assertIsNotNone(profile)
 
+    def test_admin_create_user_auto_generates_random_temp_password_and_emails(self):
+        """When admin creates a user without providing a password, a random password is generated & emailed."""
+        payload = AdminInvitationCreate(
+            full_name="Random User",
+            email="randomhire@example.com",
+            role="employee",
+            department="Product",
+            employee_id="EMP-9900",
+            temporary_password=None,
+        )
+
+        with patch("app.routers.admin_invitations.send_temporary_password_email") as mock_email:
+            res = admin_invitations.create_invitation(
+                data=payload,
+                db=self.db,
+                admin=self.admin,
+            )
+
+            self.assertEqual(res["email"], "randomhire@example.com")
+            self.assertEqual(res["role"], "employee")
+            self.assertEqual(res["status"], "Pending")
+            self.assertIsNone(res["setup_link"])
+            mock_email.assert_called_once()
+            call_kwargs = mock_email.call_args.kwargs
+            self.assertEqual(call_kwargs["email"], "randomhire@example.com")
+            self.assertEqual(call_kwargs["role"], "employee")
+            generated_pwd = call_kwargs["temporary_password"]
+            self.assertTrue(generated_pwd.startswith("TaskFlow@"))
+            self.assertGreaterEqual(len(generated_pwd), 8)
+
+        # Verify user in database
+        user = self.db.query(User).filter(User.email == "randomhire@example.com").first()
+        self.assertIsNotNone(user)
+        self.assertEqual(user.status, "active")
+        self.assertTrue(user.must_change_password)
+        self.assertTrue(verify_password(generated_pwd, user.password_hash))
+
     def test_duplicate_user_creation_rejected(self):
         """Attempting to add an existing email must raise 409 Conflict."""
         payload = AdminInvitationCreate(

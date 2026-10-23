@@ -608,13 +608,19 @@ def assign_project_team(
     )
     existing_user_ids = {m.user_id for m in existing_members}
 
+    newly_added_ids = []
     for u in target_users:
         if u.id not in existing_user_ids:
             db.add(ProjectMember(project_id=project_id, user_id=u.id))
             existing_user_ids.add(u.id)
+            newly_added_ids.append(u.id)
 
     try:
         db.commit()
+        if newly_added_ids:
+            from app.services.notification_service import notify_project_assignment
+            notify_project_assignment(db, project.id, project.name, newly_added_ids, current_user)
+            db.commit()
     except Exception:
         db.rollback()
 

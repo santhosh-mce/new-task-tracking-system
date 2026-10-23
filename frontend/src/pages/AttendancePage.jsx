@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   Calendar,
   CalendarCheck2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -96,10 +97,426 @@ function getStatusBadgeClass(status) {
   }
 }
 
+function formatLoginTimestamp(isoString) {
+  if (!isoString) {
+    return {
+      display: "—",
+      sub: "Never logged in",
+      isToday: false,
+    };
+  }
+
+  try {
+    const d = new Date(isoString);
+    const now = new Date();
+
+    const isSameDay = (d1, d2) =>
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate();
+
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+
+    const timeStr = new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+
+    if (isSameDay(d, now)) {
+      return {
+        display: `Today, ${timeStr}`,
+        sub: "Login time",
+        isToday: true,
+      };
+    } else if (isSameDay(d, yesterday)) {
+      return {
+        display: `Yesterday, ${timeStr}`,
+        sub: "Last session",
+        isToday: false,
+      };
+    } else {
+      const dateStr = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(d);
+      return {
+        display: `${dateStr}, ${timeStr}`,
+        sub: "Last session",
+        isToday: false,
+      };
+    }
+  } catch {
+    return {
+      display: isoString,
+      sub: "Session timestamp",
+      isToday: false,
+    };
+  }
+}
+
+function AdminRecentLoginsView() {
+  const [logins, setLogins] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateMode, setDateMode] = useState("all"); // 'all', 'today', 'custom'
+
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const [customDate, setCustomDate] = useState(todayStr);
+  const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const dateDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dateDropdownRef.current && !dateDropdownRef.current.contains(e.target)) {
+        setDateDropdownOpen(false);
+      }
+    }
+    if (dateDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [dateDropdownOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRecentLogins() {
+      setLoading(true);
+      setError("");
+      try {
+        const params = {};
+        if (searchQuery.trim()) {
+          params.q = searchQuery.trim();
+        }
+        if (dateMode === "today") {
+          params.date = todayStr;
+        } else if (dateMode === "custom") {
+          params.date = customDate;
+        }
+
+        const res = await api.get("/api/attendance/admin/recent-logins", { params });
+        if (!cancelled) {
+          setLogins(Array.isArray(res.data) ? res.data : []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err.response?.data?.detail || "Failed to load recent login records."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    const timer = setTimeout(() => {
+      loadRecentLogins();
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, dateMode, customDate, todayStr, retry]);
+
+  const formattedDateStr = (dateStr) => {
+    try {
+      const d = new Date(`${dateStr}T12:00:00Z`);
+      return new Intl.DateTimeFormat("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(d);
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const dateButtonLabel = useMemo(() => {
+    if (dateMode === "today") {
+      const f = formattedDateStr(todayStr);
+      return `${f} - ${f}`;
+    }
+    if (dateMode === "custom") {
+      const f = formattedDateStr(customDate);
+      return `${f} - ${f}`;
+    }
+    return "All Dates (Latest first)";
+  }, [dateMode, customDate, todayStr]);
+
+  return (
+    <div className="attendance-page-container">
+      {/* Header and Controls matching reference image */}
+      <header className="admin-att-header">
+        <div className="admin-att-title-group">
+          <h1>Attendance & Breaks</h1>
+          <p>Recently logged-in employees and interns</p>
+        </div>
+
+        <div className="admin-att-controls">
+          {/* Date Filter Dropdown */}
+          <div className="admin-att-date-wrapper" ref={dateDropdownRef}>
+            <button
+              type="button"
+              className="admin-att-date-btn"
+              onClick={() => setDateDropdownOpen(!dateDropdownOpen)}
+              aria-expanded={dateDropdownOpen}
+              title="Filter by login date"
+            >
+              <Calendar size={15} style={{ color: "#64748b" }} />
+              <span>{dateButtonLabel}</span>
+              <ChevronDown size={14} style={{ color: "#64748b" }} />
+            </button>
+
+            {dateDropdownOpen && (
+              <div className="admin-att-date-dropdown">
+                <button
+                  type="button"
+                  className={`admin-att-date-option ${dateMode === "all" ? "active" : ""}`}
+                  onClick={() => {
+                    setDateMode("all");
+                    setDateDropdownOpen(false);
+                  }}
+                >
+                  All Dates (Latest first)
+                </button>
+                <button
+                  type="button"
+                  className={`admin-att-date-option ${dateMode === "today" ? "active" : ""}`}
+                  onClick={() => {
+                    setDateMode("today");
+                    setDateDropdownOpen(false);
+                  }}
+                >
+                  Today ({formattedDateStr(todayStr)})
+                </button>
+                <div style={{ padding: "6px 8px 2px", borderTop: "1px solid #f1f5f9", marginTop: 4 }}>
+                  <span style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700, display: "block", marginBottom: 3 }}>
+                    Specific Date:
+                  </span>
+                  <input
+                    type="date"
+                    className="admin-att-date-custom-input"
+                    value={customDate}
+                    onChange={(e) => {
+                      setCustomDate(e.target.value);
+                      setDateMode("custom");
+                      setDateDropdownOpen(false);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Search Input */}
+          <div className="admin-att-search-box">
+            <Search size={16} className="admin-att-search-icon" />
+            <input
+              type="text"
+              className="admin-att-search-input"
+              placeholder="Search by name, ID or department..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search by name, ID or department"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="admin-att-search-clear"
+                onClick={() => setSearchQuery("")}
+                aria-label="Clear search query"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Pill: Recent activity · Latest first */}
+      <div className="admin-att-tagline">
+        <span className="tag-green">Recent activity</span>
+        <span className="tag-dot">·</span>
+        <span className="tag-gray">Latest first</span>
+      </div>
+
+      {/* Error alert */}
+      {error && (
+        <div className="tasks-alert tasks-alert-error" role="alert">
+          <span>{error}</span>
+          <button
+            type="button"
+            className="taskflow-btn-secondary"
+            onClick={() => setRetry((v) => v + 1)}
+          >
+            <RotateCcw size={13} />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
+      {/* Card Table matching reference */}
+      <div className="admin-att-card">
+        {loading ? (
+          <div style={{ padding: "50px 24px", textAlign: "center", color: "#64748b" }}>
+            <p style={{ margin: 0, fontWeight: 650, fontSize: "0.92rem" }}>
+              Loading recent login activity...
+            </p>
+          </div>
+        ) : logins.length === 0 ? (
+          <div className="attendance-empty-state">
+            <Clock size={36} style={{ color: "#94a3b8", marginBottom: 8 }} />
+            <h3>No employee or intern login records found</h3>
+            <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748b" }}>
+              {searchQuery
+                ? `No staff record matches "${searchQuery}".`
+                : dateMode !== "all"
+                ? "No logins recorded for the selected date."
+                : "No employee or intern accounts found in workspace."}
+            </p>
+            {(searchQuery || dateMode !== "all") && (
+              <button
+                type="button"
+                className="taskflow-btn-secondary"
+                style={{ marginTop: 12, fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}
+                onClick={() => {
+                  setSearchQuery("");
+                  setDateMode("all");
+                }}
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="admin-att-table-wrapper">
+            <table className="admin-att-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Staff ID</th>
+                  <th>Role</th>
+                  <th>Department</th>
+                  <th>Last Login</th>
+                  <th>Login Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logins.map((item) => {
+                  const meta = formatLoginTimestamp(item.last_login);
+                  const isIntern = item.role === "intern";
+                  return (
+                    <tr key={item.user_id}>
+                      {/* Name & profile photo */}
+                      <td>
+                        <div className="admin-att-user-cell">
+                          {item.profile_photo ? (
+                            <img
+                              src={item.profile_photo}
+                              alt={item.full_name}
+                              className="admin-att-avatar"
+                            />
+                          ) : (
+                            <div className="admin-att-avatar">
+                              {getInitials(item.full_name)}
+                            </div>
+                          )}
+                          <div className="admin-att-user-meta">
+                            <strong className="admin-att-user-name">
+                              {item.full_name}
+                            </strong>
+                            <span className="admin-att-user-email">
+                              {item.email}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Staff ID */}
+                      <td>
+                        <span className="admin-att-staff-id">{item.staff_id || "—"}</span>
+                      </td>
+
+                      {/* Role */}
+                      <td>
+                        <span className={`admin-att-role-pill ${isIntern ? "intern" : "employee"}`}>
+                          {isIntern ? "Intern" : "Employee"}
+                        </span>
+                      </td>
+
+                      {/* Department */}
+                      <td>
+                        <span className="admin-att-dept">{item.department || "Ingage"}</span>
+                      </td>
+
+                      {/* Last Login */}
+                      <td>
+                        <div className="admin-att-login-cell">
+                          <span className="admin-att-login-time">{meta.display}</span>
+                          <span
+                            className={`admin-att-login-sub ${
+                              meta.isToday && item.login_status === "Logged in" ? "green" : ""
+                            }`}
+                          >
+                            <span
+                              className={`sub-dot ${
+                                meta.isToday && item.login_status === "Logged in"
+                                  ? "green"
+                                  : "gray"
+                              }`}
+                            />
+                            <span>{meta.sub}</span>
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Login Status */}
+                      <td>
+                        {item.login_status === "Logged in" ? (
+                          <span className="admin-att-status-pill logged-in">
+                            <span className="dot" />
+                            <span>Logged in</span>
+                          </span>
+                        ) : item.login_status === "Last session" ? (
+                          <span className="admin-att-status-pill last-session">
+                            <span className="dot" />
+                            <span>Last session</span>
+                          </span>
+                        ) : (
+                          <span className="admin-att-status-pill never-logged-in">
+                            <span>Never logged in</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AttendancePage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const isManager = user?.role === "manager";
+
+  if (isAdmin) {
+    return <AdminRecentLoginsView />;
+  }
 
   const todayStr = new Date().toISOString().split("T")[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);

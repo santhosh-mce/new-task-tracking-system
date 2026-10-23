@@ -1,0 +1,204 @@
+/* Ingage TaskFlow Employee & Intern Sidebar CSS */
+
+.taskflow-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 45;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.taskflow-sidebar-backdrop.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.taskflow-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 256px;
+  background-color: #0b1322;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  padding: 1.5rem 1rem 1.25rem;
+  box-sizing: border-box;
+  overflow-y: auto;
+  transition: transform 0.25s ease;
+}
+
+@media (max-width: 991px) {
+  .taskflow-sidebar {
+    transform: translateX(-100%);
+  }
+  .taskflow-sidebar.is-open {
+    transform: translateX(0);
+  }
+}
+
+/* Sidebar Brand Header */
+.taskflow-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  padding: 0 0.25rem;
+}
+
+.taskflow-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  color: #ffffff;
+}
+
+.taskflow-brand-logo-icon {
+  width: 34px;
+  height: 34px;
+  background: linear-gradient(135deg, #65a30d 0%, #4d7c0f 100%);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 850;
+  font-size: 0.85rem;
+  letter-spacing: -0.04em;
+  box-shadow: 0 2px 6px rgba(101, 163, 13, 0.35);
+  flex-shrink: 0;
+}
+
+.taskflow-brand-title {
+  font-size: 1.08rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.taskflow-sidebar-close {
+  display: none;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+}
+
+@media (max-width: 991px) {
+  .taskflow-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Navigation */
+.taskflow-sidebar-nav {
+  flex: 1;
+}
+
+.taskflow-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.taskflow-nav-item {
+  width: 100%;
+}
+
+.taskflow-nav-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.72rem 1rem;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.92rem;
+  font-weight: 550;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.taskflow-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
+}
+
+/* Active State matching reference image */
+.taskflow-nav-btn.is-active {
+  background-color: #65a30d !important;
+  color: #ffffff !important;
+  font-weight: 650;
+  box-shadow: 0 2px 8px rgba(101, 163, 13, 0.35);
+}
+
+.taskflow-nav-btn.is-active svg {
+  color: #ffffff;
+}
+
+.taskflow-logout-btn {
+  margin-top: 0.5rem;
+  color: #cbd5e1;
+}
+
+.taskflow-logout-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+/* Sidebar Footer */
+.taskflow-sidebar-footer {
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.taskflow-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.taskflow-footer-logo-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 0.75rem;
+  border-radius: 7px;
+}
+
+.taskflow-footer-texts {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.taskflow-footer-texts strong {
+  font-size: 0.82rem;
+  color: #f1f5f9;
+  letter-spacing: -0.01em;
+}
+
+.taskflow-footer-texts small {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

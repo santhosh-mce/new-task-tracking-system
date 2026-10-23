@@ -62,8 +62,6 @@ function AddUserModal({ onClose, onSave, busy, error, isAdmin }) {
   const [role, setRole] = useState("employee");
   const [department, setDepartment] = useState("Ingage");
   const [employeeId, setEmployeeId] = useState("");
-  const [setupMethod, setSetupMethod] = useState("setup_link"); // 'setup_link' or 'temp_password'
-  const [tempPassword, setTempPassword] = useState("");
   const [validationError, setValidationError] = useState("");
 
   const allowedRoles = isAdmin
@@ -97,14 +95,6 @@ function AddUserModal({ onClose, onSave, busy, error, isAdmin }) {
       employee_id: trimmedId || null,
     };
 
-    if (setupMethod === "temp_password") {
-      if (!tempPassword || tempPassword.trim().length < 8) {
-        setValidationError("Temporary password must be at least 8 characters long.");
-        return;
-      }
-      payload.temporary_password = tempPassword.trim();
-    }
-
     onSave(payload);
   }
 
@@ -112,7 +102,7 @@ function AddUserModal({ onClose, onSave, busy, error, isAdmin }) {
     <AccessibleModal title="Add New User" onClose={onClose} className="invite-user-modal">
       <form className="invite-user-form" onSubmit={handleSubmit} noValidate>
         <p className="invite-modal-intro" style={{ marginBottom: "1rem" }}>
-          Create a new user account with role permissions and organization details. A secure password setup link will be generated for the user.
+          Create a new user account with role permissions and organization details. A secure temporary password will be automatically generated and sent to the user's email address.
         </p>
 
         <label style={{ display: "grid", gap: "4px", marginBottom: "0.85rem" }}>
@@ -175,7 +165,7 @@ function AddUserModal({ onClose, onSave, busy, error, isAdmin }) {
           </label>
         </div>
 
-        <label style={{ display: "grid", gap: "4px", marginBottom: "0.85rem" }}>
+        <label style={{ display: "grid", gap: "4px", marginBottom: "1rem" }}>
           <span style={{ fontWeight: 600, fontSize: "0.84rem" }}>
             {role === "intern" ? "Intern ID" : "Employee ID"} <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>(Optional - auto-generated if left empty)</span>
           </span>
@@ -188,47 +178,6 @@ function AddUserModal({ onClose, onSave, busy, error, isAdmin }) {
             style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1d5db" }}
           />
         </label>
-
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px 14px", background: "#f9fafb", marginBottom: "1rem" }}>
-          <span style={{ fontWeight: 600, fontSize: "0.84rem", display: "block", marginBottom: "6px", color: "#111827" }}>
-            Account Setup Method
-          </span>
-          <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem", cursor: "pointer", marginBottom: "6px" }}>
-            <input
-              type="radio"
-              name="setupMethod"
-              value="setup_link"
-              checked={setupMethod === "setup_link"}
-              onChange={() => setSetupMethod("setup_link")}
-            />
-            <span><strong>Generate secure setup link</strong> (Single-use, time-limited, sent by email)</span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem", cursor: "pointer" }}>
-            <input
-              type="radio"
-              name="setupMethod"
-              value="temp_password"
-              checked={setupMethod === "temp_password"}
-              onChange={() => setSetupMethod("temp_password")}
-            />
-            <span>Set temporary password directly</span>
-          </label>
-
-          {setupMethod === "temp_password" && (
-            <div style={{ marginTop: "10px" }}>
-              <input
-                type="text"
-                placeholder="Enter at least 8 characters"
-                value={tempPassword}
-                onChange={(e) => setTempPassword(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff" }}
-              />
-              <span style={{ fontSize: "0.74rem", color: "#6b7280", marginTop: "3px", display: "block" }}>
-                User must be instructed to change this password on first login.
-              </span>
-            </div>
-          )}
-        </div>
 
         {(validationError || error) && (
           <p className="feedback-error" role="alert" style={{ marginBottom: "1rem" }}>

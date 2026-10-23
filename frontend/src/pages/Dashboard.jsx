@@ -40,6 +40,7 @@ import api from "../api.js";
 import AccessibleModal from "../components/AccessibleModal.jsx";
 import AttendanceWidget from "../components/AttendanceWidget.jsx";
 import EmployeeSidebar from "../components/EmployeeSidebar.jsx";
+import NotificationBell from "../components/NotificationBell.jsx";
 import { useAuth } from "../context/useAuth.js";
 import "./AdminTasks.css";
 import "./Attendance.css";
@@ -484,6 +485,7 @@ export default function Dashboard() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <NotificationBell />
             <Link
               to="/profile"
               className="profile-btn-secondary"

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
+  Bell,
   BriefcaseBusiness,
   ChevronDown,
   ClipboardList,
@@ -53,6 +54,11 @@ export default function AdminSidebar({ open, onClose, onLogout }) {
       label: "Attendance & Breaks",
       path: `${basePath}/attendance`,
       icon: UserRoundCog,
+    },
+    {
+      label: "Notifications",
+      path: `${basePath}/notifications`,
+      icon: Bell,
     },
     ...(user?.role === "manager"
       ? []
