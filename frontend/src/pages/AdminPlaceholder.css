@@ -1,0 +1,91 @@
+.admin-placeholder-page {
+  display: grid;
+  gap: 23px;
+}
+
+.admin-placeholder-page .admin-page-intro {
+  margin-bottom: 3px;
+}
+
+.admin-placeholder-main-icon {
+  display: grid;
+  width: 51px;
+  height: 51px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgb(101 163 13 / 24%);
+  border-radius: 11px;
+  background: rgb(101 163 13 / 8%);
+  color: #65a30d;
+}
+
+.admin-placeholder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.admin-placeholder-card {
+  position: relative;
+  display: flex;
+  min-height: 218px;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid rgb(17 24 39 / 10%);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 20px;
+}
+
+.admin-placeholder-index {
+  color: #65a30d;
+  font-size: 0.7rem;
+  font-weight: 760;
+  letter-spacing: 0.1em;
+}
+
+.admin-placeholder-card h2 {
+  margin: 19px 0 8px;
+  font-size: 0.95rem;
+  letter-spacing: -0.025em;
+}
+
+.admin-placeholder-card p {
+  margin: 0;
+  color: rgb(17 24 39 / 58%);
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+.admin-placeholder-status {
+  margin-top: auto;
+  border: 1px solid rgb(17 24 39 / 12%);
+  border-radius: 99px;
+  background: rgb(17 24 39 / 3%);
+  padding: 5px 9px;
+  color: rgb(17 24 39 / 67%);
+  font-size: 0.65rem;
+  font-weight: 650;
+}
+
+.admin-placeholder-note {
+  margin: 0;
+  color: rgb(17 24 39 / 54%);
+  font-size: 0.73rem;
+}
+
+@media (max-width: 950px) {
+  .admin-placeholder-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .admin-placeholder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-placeholder-card {
+    min-height: 183px;
+  }
+}
