@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
   AlertTriangle,
@@ -41,6 +41,8 @@ import AccessibleModal from "../components/AccessibleModal.jsx";
 import AttendanceWidget from "../components/AttendanceWidget.jsx";
 import EmployeeSidebar from "../components/EmployeeSidebar.jsx";
 import NotificationBell from "../components/NotificationBell.jsx";
+import NotificationsPage from "./NotificationsPage.jsx";
+import CompleteProfilePage from "./CompleteProfilePage.jsx";
 import { useAuth } from "../context/useAuth.js";
 import "./AdminTasks.css";
 import "./Attendance.css";
@@ -82,9 +84,33 @@ function formatTime(isoString) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, clearAuth } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Sidebar navigation view: 'dashboard' | 'projects' | 'tasks'
-  const [activeView, setActiveView] = useState("dashboard");
+  // Sidebar navigation view: 'dashboard' | 'projects' | 'tasks' | 'notifications' | 'profile'
+  const viewParam = searchParams.get("view");
+  const [activeView, setActiveView] = useState(() => {
+    if (viewParam && ["dashboard", "projects", "tasks", "notifications", "profile"].includes(viewParam)) {
+      return viewParam;
+    }
+    return "dashboard";
+  });
+
+  useEffect(() => {
+    if (viewParam && ["dashboard", "projects", "tasks", "notifications", "profile"].includes(viewParam)) {
+      setActiveView(viewParam);
+    } else if (!viewParam && activeView !== "dashboard") {
+      setActiveView("dashboard");
+    }
+  }, [viewParam]);
+
+  const handleSelectView = (viewId) => {
+    setActiveView(viewId);
+    if (viewId === "dashboard") {
+      setSearchParams({});
+    } else {
+      setSearchParams({ view: viewId });
+    }
+  };
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   // Core Data States
@@ -453,7 +479,7 @@ export default function Dashboard() {
       {/* Dedicated Employee/Intern Sidebar */}
       <EmployeeSidebar
         activeView={activeView}
-        onSelectView={setActiveView}
+        onSelectView={handleSelectView}
         open={mobileDrawerOpen}
         onClose={() => setMobileDrawerOpen(false)}
         onLogout={logout}
@@ -479,26 +505,31 @@ export default function Dashboard() {
                   ? "Dashboard Overview"
                   : activeView === "projects"
                   ? "My Projects"
-                  : "My Tasks"}
+                  : activeView === "tasks"
+                  ? "My Tasks"
+                  : activeView === "notifications"
+                  ? "Notifications"
+                  : "My Profile"}
               </strong>
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <NotificationBell />
-            <Link
-              to="/profile"
-              className="profile-btn-secondary"
+            <button
+              type="button"
+              className={`profile-btn-secondary${activeView === "profile" ? " is-active" : ""}`}
+              onClick={() => handleSelectView("profile")}
               style={{
-                textDecoration: "none",
                 fontSize: "0.82rem",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
+                cursor: "pointer",
               }}
             >
               <User size={14} /> My Profile
-            </Link>
+            </button>
             <button
               type="button"
               className="profile-btn-secondary"
@@ -1568,6 +1599,20 @@ export default function Dashboard() {
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* VIEW: NOTIFICATIONS */}
+          {activeView === "notifications" && (
+            <div style={{ padding: "0 0 2rem" }}>
+              <NotificationsPage />
+            </div>
+          )}
+
+          {/* VIEW: MY PROFILE */}
+          {activeView === "profile" && (
+            <div style={{ padding: "0 0 2rem" }}>
+              <CompleteProfilePage embedded={true} />
             </div>
           )}
         </main>

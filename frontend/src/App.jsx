@@ -55,6 +55,28 @@ function LoginRedirect() {
   return <Navigate to={dest} replace />;
 }
 
+function NotificationsRoute() {
+  const { user } = useAuth();
+  if (user?.role === "admin") {
+    return <Navigate to="/admin/notifications" replace />;
+  }
+  if (user?.role === "manager") {
+    return <Navigate to="/manager/notifications" replace />;
+  }
+  return <Navigate to="/dashboard?view=notifications" replace />;
+}
+
+function ProfileRoute() {
+  const { user } = useAuth();
+  if (user?.role === "admin") {
+    return <Navigate to="/admin/profile" replace />;
+  }
+  if (user?.role === "manager") {
+    return <Navigate to="/manager/profile" replace />;
+  }
+  return <Navigate to="/dashboard?view=profile" replace />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -92,7 +114,7 @@ export default function App() {
             path="/profile"
             element={
               <ProtectedRoute>
-                <CompleteProfilePage />
+                <ProfileRoute />
               </ProtectedRoute>
             }
           />
@@ -130,6 +152,7 @@ export default function App() {
             <Route path="tasks/assign" element={<AssignTasksPage />} />
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="profile" element={<CompleteProfilePage />} />
             <Route path="reports" element={<AdminPlaceholder />} />
             <Route path="settings" element={<AdminPlaceholder />} />
           </Route>
@@ -158,13 +181,14 @@ export default function App() {
             <Route path="tasks/assign" element={<AssignTasksPage />} />
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="profile" element={<CompleteProfilePage />} />
           </Route>
 
           <Route
             path="/notifications"
             element={
               <ProtectedRoute>
-                <NotificationsPage />
+                <NotificationsRoute />
               </ProtectedRoute>
             }
           />

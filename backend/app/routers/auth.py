@@ -359,3 +359,16 @@ def register_invitation_alias(
     db: Session = Depends(get_db),
 ):
     return register_invitation(data, db)
+
+
+@router.post("/logout")
+def logout(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.attendance_service import check_out_user
+    try:
+        check_out_user(db=db, user=current_user)
+    except Exception:
+        pass
+    return {"message": "Logged out successfully"}

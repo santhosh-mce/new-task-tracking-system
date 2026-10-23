@@ -75,7 +75,7 @@ export default function NotificationBell() {
       ? "/admin/notifications"
       : user?.role === "manager"
       ? "/manager/notifications"
-      : "/notifications";
+      : "/dashboard?view=notifications";
 
   // Lightweight unread count poller
   useEffect(() => {
@@ -190,11 +190,32 @@ export default function NotificationBell() {
     }
   }
 
+  function resolveTargetLink(rawLink) {
+    if (!rawLink) return null;
+    const isStaff = user?.role === "employee" || user?.role === "intern";
+    if (isStaff) {
+      if (rawLink === "/tasks" || rawLink === "/my-tasks" || rawLink.startsWith("/tasks/")) {
+        return "/dashboard?view=tasks";
+      }
+      if (rawLink === "/projects" || rawLink.startsWith("/projects/")) {
+        return "/dashboard?view=projects";
+      }
+      if (rawLink === "/notifications") {
+        return "/dashboard?view=notifications";
+      }
+      if (rawLink === "/profile") {
+        return "/dashboard?view=profile";
+      }
+    }
+    return rawLink;
+  }
+
   function handleNotificationClick(notif) {
     handleMarkAsRead(notif);
     setOpen(false);
-    if (notif.link) {
-      navigate(notif.link);
+    const dest = resolveTargetLink(notif.link);
+    if (dest) {
+      navigate(dest);
     }
   }
 

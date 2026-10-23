@@ -1,10 +1,21 @@
+import json
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from sqlalchemy.orm import Session
 
+from app.database import SessionLocal
 from app.dependencies.auth import get_current_user, get_db
 from app.dependencies.permissions import require_admin
 from app.models.attendance import (
@@ -35,6 +46,7 @@ from app.schemas.attendance import (
     TodayAttendanceStatus,
 )
 from app.services.attendance_service import (
+    build_recent_login_item,
     check_in_user,
     check_out_user,
     end_break,
@@ -53,6 +65,7 @@ from app.services.attendance_service import (
     to_business_date,
     utc_now,
 )
+from app.services.attendance_websocket import attendance_ws_manager, decode_token
 
 router = APIRouter(prefix="/api/attendance", tags=["Attendance & Breaks"])
 
@@ -521,125 +534,175 @@ def list_admin_records(
     )
 
 
+@router.websocket("/ws")
+async def attendance_websocket_endpoint(
+    websocket: WebSocket,
+    token: str | None = Query(None),
+):
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    payload = decode_token(token)
+    if not payload or "sub" not in payload:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    user_id = None
+    db = SessionLocal()
+    try:
+        user_id = int(payload["sub"])
+        user = db.query(User).filter(User.id == user_id, User.status == "active").first()
+        if not user:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        await attendance_ws_manager.connect(websocket, user)
+        # Update user last seen & session heartbeat
+        now = utc_now()
+        user.last_seen_at = now
+        open_session = (
+            db.query(AttendanceSession)
+            .filter(AttendanceSession.user_id == user.id, AttendanceSession.check_out.is_(None))
+            .first()
+        )
+        if open_session:
+            open_session.last_heartbeat = now
+        db.commit()
+        # Broadcast connected status to authorized viewers
+        await attendance_ws_manager.broadcast_user_update(user.id, db=db)
+    except Exception:
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        return
+    finally:
+        db.close()
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            try:
+                msg = json.loads(data)
+            except Exception:
+                msg = {"type": data}
+
+            msg_type = msg.get("type")
+            if msg_type == "ping":
+                hb_db = SessionLocal()
+                try:
+                    now = utc_now()
+                    u = hb_db.query(User).filter(User.id == user_id).first()
+                    if u:
+                        u.last_seen_at = now
+                    s = (
+                        hb_db.query(AttendanceSession)
+                        .filter(AttendanceSession.user_id == user_id, AttendanceSession.check_out.is_(None))
+                        .first()
+                    )
+                    if s:
+                        s.last_heartbeat = now
+                    hb_db.commit()
+                except Exception:
+                    pass
+                finally:
+                    hb_db.close()
+
+                await websocket.send_json({
+                    "type": "pong",
+                    "timestamp": utc_now().isoformat(),
+                })
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        disconnected_user_id = await attendance_ws_manager.disconnect(websocket)
+        if disconnected_user_id:
+            if not attendance_ws_manager.is_user_connected(disconnected_user_id):
+                try:
+                    await attendance_ws_manager.broadcast_user_update(disconnected_user_id)
+                except Exception:
+                    pass
+
+
 @router.get("/admin/recent-logins", response_model=list[RecentLoginStaffItem])
+@router.get("/recent-logins", response_model=list[RecentLoginStaffItem])
 def get_recent_logins(
     q: str | None = None,
     department: str | None = None,
     role: str | None = None,
+    status: str | None = None,
     date: date | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can access recent staff login records.",
+    # Role Scoping:
+    # - Admins see all staff members across the organization.
+    # - Managers see staff members within their permitted scope.
+    # - Employees and Interns see only their own attendance and break status.
+    if current_user.role == "admin":
+        users = (
+            db.query(User)
+            .filter(
+                User.status.in_(("active", "invitation_pending")),
+            )
+            .order_by(User.full_name)
+            .all()
         )
-
-    users = (
-        db.query(User)
-        .filter(
-            User.role.in_(("employee", "intern")),
-            User.status.in_(("active", "invitation_pending")),
-        )
-        .all()
-    )
+    elif current_user.role == "manager":
+        users = get_authorized_staff_users(db, current_user)
+    else:
+        users = [current_user]
 
     if not users:
         return []
 
-    user_ids = [u.id for u in users]
-
-    profiles = db.query(StaffProfile).filter(StaffProfile.user_id.in_(user_ids)).all()
-    profile_map = {p.user_id: p for p in profiles}
-
-    sessions = (
-        db.query(AttendanceSession)
-        .filter(AttendanceSession.user_id.in_(user_ids))
-        .order_by(AttendanceSession.check_in.desc())
-        .all()
-    )
-
-    latest_session_map: dict[int, AttendanceSession] = {}
-    for s in sessions:
-        if s.user_id not in latest_session_map:
-            latest_session_map[s.user_id] = s
-
     policy = get_default_policy(db)
-    today = local_now(policy).date()
-
     results: list[RecentLoginStaffItem] = []
 
     for user in users:
-        prof = profile_map.get(user.id)
-        staff_id = (
-            prof.staff_id
-            if prof and prof.staff_id
-            else f"{'INT' if user.role == 'intern' else 'EMP'}-{user.id:04d}"
-        )
-        dept = (prof.department if prof and prof.department else "Ingage")
-        photo = prof.profile_photo if prof else None
+        item = build_recent_login_item(db, user, policy)
 
-        sess = latest_session_map.get(user.id)
-        last_login = sess.check_in if sess else None
-        source = sess.source if sess else None
+        # Department filter
+        if department and department != "All":
+            if not item.department or item.department.lower() != department.strip().lower():
+                continue
 
-        if sess is None:
-            login_status = "Never logged in"
-            is_active = False
-        else:
-            sess_date = to_business_date(sess.check_in, policy)
-            if sess.check_out is None and sess_date == today:
-                login_status = "Logged in"
-                is_active = True
-            else:
-                login_status = "Last session"
-                is_active = False
-
-        if department and dept.lower() != department.strip().lower():
+        # Role filter
+        if role and role != "All" and item.role.lower() != role.strip().lower():
             continue
 
-        if role and role != "All" and user.role.lower() != role.strip().lower():
-            continue
+        # Status filter ("All", "Online", "On Break", "Offline", "Never Logged In")
+        if status and status != "All":
+            if item.current_status.lower() != status.strip().lower():
+                continue
 
+        # Date filter
         if date:
-            if not last_login or to_business_date(last_login, policy) != date:
+            if not item.last_login or to_business_date(item.last_login, policy) != date:
                 continue
 
         if date_from and date_to:
-            if not last_login:
+            if not item.last_login:
                 continue
-            sess_date = to_business_date(last_login, policy)
+            sess_date = to_business_date(item.last_login, policy)
             if sess_date < date_from or sess_date > date_to:
                 continue
 
+        # Query search filter
         if q:
             term = q.strip().lower()
-            name_match = bool(user.full_name and term in user.full_name.lower())
-            email_match = bool(term in user.email.lower())
-            id_match = bool(staff_id and term in staff_id.lower())
-            dept_match = bool(dept and term in dept.lower())
+            name_match = bool(item.full_name and term in item.full_name.lower())
+            email_match = bool(term in item.email.lower())
+            id_match = bool(item.staff_id and term in item.staff_id.lower())
+            dept_match = bool(item.department and term in item.department.lower())
             if not (name_match or email_match or id_match or dept_match):
                 continue
 
-        results.append(
-            RecentLoginStaffItem(
-                user_id=user.id,
-                full_name=user.full_name or "Staff Member",
-                email=user.email,
-                role=user.role,
-                staff_id=staff_id,
-                department=dept,
-                profile_photo=photo,
-                last_login=last_login,
-                login_status=login_status,
-                is_active_session=is_active,
-                source=source,
-            )
-        )
+        results.append(item)
 
+    # Sort newest login first, users with no login placed at end
     results.sort(
         key=lambda item: (
             item.last_login is not None,

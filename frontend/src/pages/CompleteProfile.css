@@ -33,6 +33,17 @@
   padding-bottom: 6rem;
 }
 
+.complete-profile-page.is-embedded {
+  min-height: auto;
+  background-color: transparent;
+  padding-bottom: 2rem;
+}
+
+.complete-profile-page.is-embedded .complete-profile-container {
+  padding: 0;
+  max-width: 100%;
+}
+
 /* Header */
 .complete-profile-header {
   background: var(--taskflow-surface);

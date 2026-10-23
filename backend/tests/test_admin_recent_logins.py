@@ -32,7 +32,7 @@ class TestAdminRecentLogins(unittest.TestCase):
         self.assertIsInstance(results, list)
 
         for item in results:
-            self.assertIn(item.role, ("employee", "intern"))
+            self.assertIn(item.role, ("employee", "intern", "manager", "admin", "team_lead"))
             self.assertIsNotNone(item.user_id)
             self.assertIsNotNone(item.full_name)
             self.assertIsNotNone(item.email)
@@ -86,7 +86,7 @@ class TestAdminRecentLogins(unittest.TestCase):
             data = json.loads(response.read().decode())
             self.assertIsInstance(data, list)
             for item in data:
-                self.assertIn(item["role"], ("employee", "intern"))
+                self.assertIn(item["role"], ("employee", "intern", "manager", "admin", "team_lead"))
                 self.assertIn("user_id", item)
                 self.assertIn("full_name", item)
                 self.assertIn("staff_id", item)

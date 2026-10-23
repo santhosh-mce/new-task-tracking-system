@@ -135,7 +135,20 @@ export default function NotificationsPage() {
       handleMarkSingleRead(notif.id);
     }
     if (notif.link) {
-      navigate(notif.link);
+      const isStaff = user?.role === "employee" || user?.role === "intern";
+      let dest = notif.link;
+      if (isStaff) {
+        if (dest === "/tasks" || dest === "/my-tasks" || dest.startsWith("/tasks/")) {
+          dest = "/dashboard?view=tasks";
+        } else if (dest === "/projects" || dest.startsWith("/projects/")) {
+          dest = "/dashboard?view=projects";
+        } else if (dest === "/notifications") {
+          dest = "/dashboard?view=notifications";
+        } else if (dest === "/profile") {
+          dest = "/dashboard?view=profile";
+        }
+      }
+      navigate(dest);
     }
   }
 

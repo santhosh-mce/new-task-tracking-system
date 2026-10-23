@@ -8,7 +8,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import "./EmployeeSidebar.css";
 
 export default function EmployeeSidebar({
@@ -20,6 +20,7 @@ export default function EmployeeSidebar({
   user,
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const sidebarRef = useRef(null);
   const closeButtonRef = useRef(null);
 
@@ -29,6 +30,8 @@ export default function EmployeeSidebar({
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "projects", label: "My Projects", icon: Briefcase },
     { id: "tasks", label: "My Tasks", icon: ClipboardList },
+    { id: "notifications", label: "Notifications", icon: Bell },
+    { id: "profile", label: "My Profile", icon: User },
   ];
 
   useEffect(() => {
@@ -107,15 +110,19 @@ export default function EmployeeSidebar({
           <ul className="taskflow-nav-list">
             {navigationItems.map((item) => {
               const Icon = item.icon;
-              const isActive =
-                location.pathname === "/dashboard" && activeView === item.id;
+              const isActive = activeView === item.id;
               return (
                 <li key={item.id} className="taskflow-nav-item">
                   <button
                     type="button"
                     className={`taskflow-nav-btn${isActive ? " is-active" : ""}`}
                     onClick={() => {
-                      onSelectView(item.id);
+                      if (onSelectView) {
+                        onSelectView(item.id);
+                      }
+                      if (location.pathname !== "/dashboard") {
+                        navigate(item.id === "dashboard" ? "/dashboard" : `/dashboard?view=${item.id}`);
+                      }
                       if (onClose) onClose();
                     }}
                   >
@@ -125,37 +132,6 @@ export default function EmployeeSidebar({
                 </li>
               );
             })}
-
-            {/* Notifications Link */}
-            <li className="taskflow-nav-item">
-              <Link
-                to="/notifications"
-                className={`taskflow-nav-btn${
-                  location.pathname === "/notifications" ? " is-active" : ""
-                }`}
-                onClick={onClose}
-              >
-                <Bell size={19} aria-hidden="true" />
-                <span>Notifications</span>
-              </Link>
-            </li>
-
-            {/* My Profile Link */}
-            <li className="taskflow-nav-item">
-              <Link
-                to="/profile"
-                className={`taskflow-nav-btn${
-                  location.pathname === "/profile" ||
-                  location.pathname === "/complete-profile"
-                    ? " is-active"
-                    : ""
-                }`}
-                onClick={onClose}
-              >
-                <User size={19} aria-hidden="true" />
-                <span>My Profile</span>
-              </Link>
-            </li>
 
             {/* Logout Nav Item */}
             <li className="taskflow-nav-item">

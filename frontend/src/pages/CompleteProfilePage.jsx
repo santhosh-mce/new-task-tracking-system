@@ -73,7 +73,7 @@ const suggestedSoftSkills = [
   "Attention to Detail",
 ];
 
-export default function CompleteProfilePage() {
+export default function CompleteProfilePage({ embedded = false }) {
   const navigate = useNavigate();
   const { user, authenticate, clearAuth } = useAuth();
 
@@ -662,36 +662,38 @@ export default function CompleteProfilePage() {
   const isProfileComplete = profileData?.profile_status === "complete";
 
   return (
-    <div className="complete-profile-page">
+    <div className={`complete-profile-page${embedded ? " is-embedded" : ""}`}>
       {/* Top Header */}
-      <header className="complete-profile-header">
-        <Link to="/dashboard" className="complete-profile-brand">
-          <span className="complete-profile-brand-icon">T</span>
-          <span className="complete-profile-brand-name">TaskFlow Workspace</span>
-        </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          {isProfileComplete && (
-            <Link
-              to={profileData?.role === "admin" ? "/admin" : profileData?.role === "manager" ? "/manager" : "/dashboard"}
+      {!embedded && (
+        <header className="complete-profile-header">
+          <Link to="/dashboard" className="complete-profile-brand">
+            <span className="complete-profile-brand-icon">T</span>
+            <span className="complete-profile-brand-name">TaskFlow Workspace</span>
+          </Link>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            {isProfileComplete && (
+              <Link
+                to={profileData?.role === "admin" ? "/admin" : profileData?.role === "manager" ? "/manager" : "/dashboard"}
+                className="profile-btn-secondary"
+                style={{ textDecoration: "none", fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}
+              >
+                <LayoutDashboard size={14} /> Back to Dashboard
+              </Link>
+            )}
+            <span style={{ fontSize: "0.85rem", color: "var(--taskflow-text-muted)" }}>
+              Signed in as <strong>{profileData?.email}</strong>
+            </span>
+            <button
+              type="button"
               className="profile-btn-secondary"
-              style={{ textDecoration: "none", fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}
+              onClick={handleLogout}
+              style={{ fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}
             >
-              <LayoutDashboard size={14} /> Back to Dashboard
-            </Link>
-          )}
-          <span style={{ fontSize: "0.85rem", color: "var(--taskflow-text-muted)" }}>
-            Signed in as <strong>{profileData?.email}</strong>
-          </span>
-          <button
-            type="button"
-            className="profile-btn-secondary"
-            onClick={handleLogout}
-            style={{ fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}
-          >
-            <LogOut size={14} /> Sign out
-          </button>
-        </div>
-      </header>
+              <LogOut size={14} /> Sign out
+            </button>
+          </div>
+        </header>
+      )}
 
       <div className="complete-profile-container">
         {/* Hero Banner */}

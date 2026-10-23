@@ -42,10 +42,16 @@ export function AuthProvider({ children }) {
     setStatus("authenticated");
   }, []);
 
-  const clearAuth = useCallback(() => {
-    clearAuthSession();
-    setUser(null);
-    setStatus("unauthenticated");
+  const clearAuth = useCallback(async () => {
+    try {
+      await api.post("/api/auth/logout");
+    } catch {
+      // Ignore network errors on logout
+    } finally {
+      clearAuthSession();
+      setUser(null);
+      setStatus("unauthenticated");
+    }
   }, []);
 
   return (

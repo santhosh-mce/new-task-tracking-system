@@ -1,5 +1,5 @@
 
-from sqlalchemy import Boolean, Column, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 
 from app.database import Base
 
@@ -37,3 +37,11 @@ class User(Base):
         nullable=False,
         default="completed",
     )
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    current_status = Column(
+        String(30),
+        nullable=False,
+        default="Offline",
+    )
+

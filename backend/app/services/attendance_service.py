@@ -26,6 +26,7 @@ from app.schemas.attendance import (
     AttendanceSessionResponse,
     AttendanceSummaryCounts,
     MonthlyStaffAttendanceSummary,
+    RecentLoginStaffItem,
     TodayAttendanceStatus,
 )
 
@@ -301,6 +302,14 @@ def check_in_user(
         .first()
     )
     if open_session:
+        open_session.last_heartbeat = now
+        open_session.session_status = "Online"
+        user.last_login_at = user.last_login_at or open_session.check_in or now
+        user.last_seen_at = now
+        user.current_status = "Online"
+        db.commit()
+        from app.services.attendance_websocket import attendance_ws_manager
+        attendance_ws_manager.sync_broadcast_user_update(user.id)
         return open_session, daily
 
     # Create new session
@@ -308,6 +317,8 @@ def check_in_user(
         attendance_id=daily.id,
         user_id=user.id,
         check_in=now,
+        last_heartbeat=now,
+        session_status="Online",
         source=source,
         ip_address=ip_address,
         user_agent=user_agent,
@@ -316,12 +327,20 @@ def check_in_user(
     db.add(session)
     db.flush()
 
+    # Update user status & last login
+    user.last_login_at = now
+    user.last_seen_at = now
+    user.current_status = "Online"
+
     # Update daily record
     daily.sessions.append(session)
     recalculate_daily_attendance(daily, policy, db)
     db.commit()
     db.refresh(session)
     db.refresh(daily)
+
+    from app.services.attendance_websocket import attendance_ws_manager
+    attendance_ws_manager.sync_broadcast_user_update(user.id)
 
     return session, daily
 
@@ -346,7 +365,11 @@ def check_out_user(
     )
 
     if not open_session:
-        # Idempotently return None / current day without throwing fatal crash
+        user.current_status = "Offline"
+        user.last_seen_at = now
+        db.commit()
+        from app.services.attendance_websocket import attendance_ws_manager
+        attendance_ws_manager.sync_broadcast_user_update(user.id)
         return None, daily
 
     # If user has an open break, close it now
@@ -366,11 +389,18 @@ def check_out_user(
     open_session.duration_minutes = max(
         0, int((now - ensure_utc(open_session.check_in)).total_seconds() / 60)
     )
+    open_session.session_status = "Offline"
+    open_session.last_heartbeat = now
+    user.current_status = "Offline"
+    user.last_seen_at = now
 
     recalculate_daily_attendance(daily, policy, db)
     db.commit()
     db.refresh(open_session)
     db.refresh(daily)
+
+    from app.services.attendance_websocket import attendance_ws_manager
+    attendance_ws_manager.sync_broadcast_user_update(user.id)
 
     return open_session, daily
 
@@ -426,8 +456,18 @@ def start_break(
         created_at=now,
     )
     db.add(brk)
+
+    open_session.session_status = "On Break"
+    open_session.last_heartbeat = now
+    user.current_status = "On Break"
+    user.last_seen_at = now
+
     db.commit()
     db.refresh(brk)
+
+    from app.services.attendance_websocket import attendance_ws_manager
+    attendance_ws_manager.sync_broadcast_user_update(user.id)
+
     return brk
 
 
@@ -455,11 +495,187 @@ def end_break(
         0, int((now - ensure_utc(open_break.start_time)).total_seconds() / 60)
     )
 
+    open_session = (
+        db.query(AttendanceSession)
+        .filter(
+            AttendanceSession.user_id == user.id,
+            AttendanceSession.check_out.is_(None),
+        )
+        .first()
+    )
+    if open_session:
+        open_session.session_status = "Online"
+        open_session.last_heartbeat = now
+
+    user.current_status = "Online"
+    user.last_seen_at = now
+
     daily = get_or_create_daily_attendance(db, user.id, today_date, policy)
     recalculate_daily_attendance(daily, policy, db)
     db.commit()
     db.refresh(open_break)
+
+    from app.services.attendance_websocket import attendance_ws_manager
+    attendance_ws_manager.sync_broadcast_user_update(user.id)
+
     return open_break
+
+
+def build_recent_login_item(
+    db: Session,
+    user: User,
+    policy: AttendancePolicy | None = None,
+    is_ws_connected: bool | None = None,
+) -> RecentLoginStaffItem:
+    if policy is None:
+        policy = get_default_policy(db)
+
+    now = utc_now()
+    today = to_business_date(now, policy)
+
+    prof = db.query(StaffProfile).filter(StaffProfile.user_id == user.id).first()
+    staff_id = (
+        prof.staff_id
+        if prof and prof.staff_id
+        else f"{'INT' if user.role == 'intern' else 'EMP'}-{user.id:04d}"
+    )
+    dept = prof.department if prof and prof.department else "Ingage"
+    photo = prof.profile_photo if prof else None
+
+    # Latest session for this user
+    sess = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.user_id == user.id)
+        .order_by(AttendanceSession.check_in.desc())
+        .first()
+    )
+
+    # Active break if any
+    active_break = (
+        db.query(AttendanceBreak)
+        .filter(
+            AttendanceBreak.user_id == user.id,
+            AttendanceBreak.end_time.is_(None),
+        )
+        .order_by(AttendanceBreak.start_time.desc())
+        .first()
+    )
+
+    from app.services.attendance_websocket import attendance_ws_manager
+    ws_connected = is_ws_connected if is_ws_connected is not None else attendance_ws_manager.is_user_connected(user.id)
+
+    if sess is None:
+        status_str = "Never Logged In"
+        last_login = None
+        source = None
+        is_active = False
+        is_on_break = False
+        session_sec = 0
+        break_sec = 0
+        working_sec = 0
+        last_act = user.last_seen_at or user.last_login_at
+    else:
+        last_login = sess.check_in
+        source = sess.source
+        sess_date = to_business_date(sess.check_in, policy)
+        is_today_session = (sess_date == today)
+
+        if sess.check_out is not None:
+            status_str = "Offline"
+            is_active = False
+            is_on_break = False
+            session_sec = max(0, int((ensure_utc(sess.check_out) - ensure_utc(sess.check_in)).total_seconds()))
+            # Sum completed breaks for this session
+            completed_breaks = (
+                db.query(AttendanceBreak)
+                .filter(
+                    AttendanceBreak.user_id == user.id,
+                    AttendanceBreak.session_id == sess.id,
+                    AttendanceBreak.end_time.isnot(None),
+                )
+                .all()
+            )
+            break_sec = sum(
+                max(0, int((ensure_utc(b.end_time) - ensure_utc(b.start_time)).total_seconds()))
+                for b in completed_breaks if b.end_time and b.start_time
+            )
+            working_sec = max(0, session_sec - break_sec)
+            last_act = sess.check_out
+        else:
+            # Session check_out is None
+            if not is_today_session:
+                # Past day session left hanging -> treat as Offline
+                status_str = "Offline"
+                is_active = False
+                is_on_break = False
+                session_sec = sess.duration_minutes * 60 if sess.duration_minutes else 0
+                break_sec = 0
+                working_sec = session_sec
+                last_act = sess.last_heartbeat or sess.check_in
+            else:
+                # Today's active session: check heartbeat freshness
+                last_hb = sess.last_heartbeat or sess.check_in
+                seconds_since_hb = (now - ensure_utc(last_hb)).total_seconds() if last_hb else 9999
+
+                if active_break is not None:
+                    status_str = "On Break"
+                    is_active = True
+                    is_on_break = True
+                elif ws_connected or seconds_since_hb <= 90:
+                    status_str = "Online"
+                    is_active = True
+                    is_on_break = False
+                else:
+                    status_str = "Offline"
+                    is_active = False
+                    is_on_break = False
+
+                session_sec = max(0, int((now - ensure_utc(sess.check_in)).total_seconds()))
+
+                # Completed breaks today
+                completed_breaks = (
+                    db.query(AttendanceBreak)
+                    .filter(
+                        AttendanceBreak.user_id == user.id,
+                        AttendanceBreak.end_time.isnot(None),
+                        AttendanceBreak.start_time >= datetime.combine(today, time.min, tzinfo=timezone.utc),
+                    )
+                    .all()
+                )
+                c_break_sec = sum(
+                    max(0, int((ensure_utc(b.end_time) - ensure_utc(b.start_time)).total_seconds()))
+                    for b in completed_breaks if b.end_time and b.start_time
+                )
+                live_break_sec = 0
+                if active_break and active_break.start_time:
+                    live_break_sec = max(0, int((now - ensure_utc(active_break.start_time)).total_seconds()))
+
+                break_sec = c_break_sec + live_break_sec
+                working_sec = max(0, session_sec - break_sec)
+                last_act = sess.last_heartbeat or user.last_seen_at or sess.check_in
+
+    legacy_login_status = "Logged in" if is_active else ("Last session" if sess else "Never logged in")
+
+    return RecentLoginStaffItem(
+        user_id=user.id,
+        full_name=user.full_name or "Staff Member",
+        email=user.email,
+        role=user.role,
+        staff_id=staff_id,
+        department=dept,
+        profile_photo=photo,
+        last_login=last_login,
+        login_status=legacy_login_status,
+        current_status=status_str,
+        session_duration_seconds=session_sec,
+        break_duration_seconds=break_sec,
+        working_duration_seconds=working_sec,
+        last_activity=last_act,
+        is_active_session=is_active,
+        is_on_break=is_on_break,
+        active_break_start=active_break.start_time if (active_break and is_on_break) else None,
+        source=source,
+    )
 
 
 def get_today_live_status(

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import {
+  Activity,
   Calendar,
   CalendarCheck2,
   ChevronDown,
@@ -12,10 +13,12 @@ import {
   FileEdit,
   Filter,
   History,
+  Radio,
   RotateCcw,
   Search,
   Settings2,
   ShieldCheck,
+  Timer,
   UserCheck,
   Users,
   X,
@@ -159,19 +162,141 @@ function formatLoginTimestamp(isoString) {
   }
 }
 
-function AdminRecentLoginsView() {
+function formatSeconds(sec) {
+  if (!sec || sec < 0) return "00h 00m 00s";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+}
+
+function getRoleBadge(role) {
+  const r = (role || "").toLowerCase();
+  switch (r) {
+    case "admin":
+      return { label: "Admin", className: "role-pill-admin" };
+    case "manager":
+      return { label: "Manager", className: "role-pill-manager" };
+    case "team_lead":
+      return { label: "Team Lead", className: "role-pill-lead" };
+    case "intern":
+      return { label: "Intern", className: "role-pill-intern" };
+    default:
+      return { label: "Employee", className: "role-pill-employee" };
+  }
+}
+
+function getLiveSessionDuration(item, nowMs) {
+  if (item.current_status === "Never Logged In" || !item.last_login) {
+    return "—";
+  }
+  if (item.current_status === "Online" || item.current_status === "On Break") {
+    const elapsedSec = Math.max(0, Math.floor((nowMs - new Date(item.last_login).getTime()) / 1000));
+    return formatSeconds(elapsedSec);
+  }
+  return item.session_duration_seconds ? formatSeconds(item.session_duration_seconds) : "—";
+}
+
+function getLiveBreakDuration(item, nowMs) {
+  if (item.current_status === "Never Logged In") {
+    return "—";
+  }
+  let totalSec = item.break_duration_seconds || 0;
+  if (item.current_status === "On Break" && item.active_break_start) {
+    const liveSec = Math.max(0, Math.floor((nowMs - new Date(item.active_break_start).getTime()) / 1000));
+    totalSec += liveSec;
+  }
+  return totalSec > 0 ? formatSeconds(totalSec) : "00h 00m 00s";
+}
+
+function getLiveLastActivity(item, nowMs) {
+  if (!item.last_activity && !item.last_login) return { text: "—", isRecent: false };
+  const actTime = item.last_activity || item.last_login;
+  const diffSec = Math.max(0, Math.floor((nowMs - new Date(actTime).getTime()) / 1000));
+  if (item.current_status === "Online") {
+    if (diffSec < 35) return { text: "Active now", isRecent: true };
+    return { text: `${Math.floor(diffSec / 60)}m ago`, isRecent: true };
+  }
+  if (item.current_status === "On Break") {
+    return { text: "On Break", isRecent: false };
+  }
+  if (diffSec < 60) return { text: "Just now", isRecent: false };
+  if (diffSec < 3600) return { text: `${Math.floor(diffSec / 60)}m ago`, isRecent: false };
+  if (diffSec < 86400) return { text: `${Math.floor(diffSec / 3600)}h ago`, isRecent: false };
+  try {
+    return {
+      text: new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }).format(new Date(actTime)),
+      isRecent: false,
+    };
+  } catch {
+    return { text: "—", isRecent: false };
+  }
+}
+
+function renderStatusBadge(status) {
+  switch (status) {
+    case "Online":
+      return (
+        <span className="admin-att-status-pill online">
+          <span className="dot pulse" />
+          <span>Online</span>
+        </span>
+      );
+    case "On Break":
+      return (
+        <span className="admin-att-status-pill on-break">
+          <Coffee size={12} />
+          <span>On Break</span>
+        </span>
+      );
+    case "Offline":
+      return (
+        <span className="admin-att-status-pill offline">
+          <span className="dot" />
+          <span>Offline</span>
+        </span>
+      );
+    default:
+      return (
+        <span className="admin-att-status-pill never-logged-in">
+          <span>Never Logged In</span>
+        </span>
+      );
+  }
+}
+
+function RealtimeAttendanceView({ user }) {
   const [logins, setLogins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [dateMode, setDateMode] = useState("all"); // 'all', 'today', 'custom'
-
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
   const [customDate, setCustomDate] = useState(todayStr);
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [wsStatus, setWsStatus] = useState("offline"); // 'connected', 'reconnecting', 'offline'
+  const [nowMs, setNowMs] = useState(Date.now());
+  const [showMyWidget, setShowMyWidget] = useState(user?.role === "employee" || user?.role === "intern");
   const dateDropdownRef = useRef(null);
 
+  // 1-second interval to tick active durations live
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Dropdown dismiss handler
   useEffect(() => {
     function handleClickOutside(e) {
       if (dateDropdownRef.current && !dateDropdownRef.current.contains(e.target)) {
@@ -186,6 +311,98 @@ function AdminRecentLoginsView() {
     };
   }, [dateDropdownOpen]);
 
+  // WebSocket Connection with auto reconnect and heartbeat
+  useEffect(() => {
+    let ws = null;
+    let pingInterval = null;
+    let reconnectTimeout = null;
+    let isMounted = true;
+    let reconnectAttempts = 0;
+
+    function connectWs() {
+      if (!isMounted) return;
+      const token = sessionStorage.getItem("access_token");
+      if (!token) return;
+
+      const loc = window.location;
+      const host = loc.port === "5173" ? `${loc.hostname}:8000` : loc.host;
+      const protocol = loc.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${host}/api/attendance/ws?token=${encodeURIComponent(token)}`;
+
+      try {
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          if (!isMounted) return;
+          setWsStatus("connected");
+          reconnectAttempts = 0;
+          // Refresh snapshot on connect to ensure live accuracy
+          setRetry((v) => v + 1);
+
+          pingInterval = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "ping" }));
+            }
+          }, 25000);
+        };
+
+        ws.onmessage = (event) => {
+          if (!isMounted) return;
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === "attendance:update" && msg.data) {
+              const updatedItem = msg.data;
+              setLogins((prev) => {
+                const idx = prev.findIndex((x) => x.user_id === updatedItem.user_id);
+                let nextList;
+                if (idx >= 0) {
+                  nextList = [...prev];
+                  nextList[idx] = { ...nextList[idx], ...updatedItem };
+                } else {
+                  nextList = [updatedItem, ...prev];
+                }
+                return nextList.sort((a, b) => {
+                  if (!a.last_login && !b.last_login) return 0;
+                  if (!a.last_login) return 1;
+                  if (!b.last_login) return -1;
+                  return new Date(b.last_login) - new Date(a.last_login);
+                });
+              });
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        };
+
+        ws.onclose = () => {
+          if (!isMounted) return;
+          setWsStatus("reconnecting");
+          if (pingInterval) clearInterval(pingInterval);
+
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 16000);
+          reconnectAttempts += 1;
+          reconnectTimeout = setTimeout(connectWs, delay);
+        };
+
+        ws.onerror = () => {
+          if (ws) ws.close();
+        };
+      } catch (err) {
+        setWsStatus("offline");
+      }
+    }
+
+    connectWs();
+
+    return () => {
+      isMounted = false;
+      if (pingInterval) clearInterval(pingInterval);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) ws.close();
+    };
+  }, []);
+
+  // Fetch authoritatively scoped staff logins
   useEffect(() => {
     let cancelled = false;
     async function loadRecentLogins() {
@@ -195,6 +412,9 @@ function AdminRecentLoginsView() {
         const params = {};
         if (searchQuery.trim()) {
           params.q = searchQuery.trim();
+        }
+        if (statusFilter && statusFilter !== "All") {
+          params.status = statusFilter;
         }
         if (dateMode === "today") {
           params.date = todayStr;
@@ -225,7 +445,7 @@ function AdminRecentLoginsView() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchQuery, dateMode, customDate, todayStr, retry]);
+  }, [searchQuery, statusFilter, dateMode, customDate, todayStr, retry]);
 
   const formattedDateStr = (dateStr) => {
     try {
@@ -254,14 +474,71 @@ function AdminRecentLoginsView() {
 
   return (
     <div className="attendance-page-container">
-      {/* Header and Controls matching reference image */}
+      {/* Self-service check-in/break card for Employee / Intern or toggled by Admin/Manager */}
+      {(user?.role === "employee" || user?.role === "intern" || showMyWidget) && (
+        <div className="att-self-service-card">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Clock size={18} style={{ color: "#65a30d" }} />
+              <strong style={{ fontSize: "0.95rem", color: "#0f172a" }}>My Daily Attendance & Break Controls</strong>
+            </div>
+            {(user?.role === "admin" || user?.role === "manager") && (
+              <button
+                type="button"
+                className="taskflow-btn-secondary"
+                style={{ fontSize: "0.76rem", padding: "0.25rem 0.6rem" }}
+                onClick={() => setShowMyWidget(false)}
+              >
+                Hide Panel
+              </button>
+            )}
+          </div>
+          <AttendanceWidget onActionComplete={() => setRetry((v) => v + 1)} />
+        </div>
+      )}
+
+      {/* Header and Controls */}
       <header className="admin-att-header">
         <div className="admin-att-title-group">
-          <h1>Attendance & Breaks</h1>
-          <p>Recently logged-in employees and interns</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <h1>Attendance & Breaks</h1>
+            {/* Live WebSocket Connection Pill */}
+            {wsStatus === "connected" ? (
+              <span className="ws-status-badge connected" title="Connected in real-time via WebSockets">
+                <span className="ws-dot" />
+                <span>Live</span>
+              </span>
+            ) : wsStatus === "reconnecting" ? (
+              <span className="ws-status-badge reconnecting" title="Reconnecting to real-time attendance service...">
+                <span className="ws-dot" />
+                <span>Reconnecting...</span>
+              </span>
+            ) : (
+              <span className="ws-status-badge offline" title="Offline mode">
+                <span className="ws-dot" />
+                <span>Offline</span>
+              </span>
+            )}
+          </div>
+          <p>Real-time employee, intern, manager, and admin session tracking</p>
         </div>
 
         <div className="admin-att-controls">
+          {/* Status Filter Dropdown */}
+          <select
+            className="admin-att-status-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            title="Filter by current status"
+            aria-label="Filter by current status"
+          >
+            <option value="All">All Statuses</option>
+            <option value="Online">Online</option>
+            <option value="On Break">On Break</option>
+            <option value="Offline">Offline</option>
+            <option value="Never Logged In">Never Logged In</option>
+          </select>
+
           {/* Date Filter Dropdown */}
           <div className="admin-att-date-wrapper" ref={dateDropdownRef}>
             <button
@@ -339,14 +616,42 @@ function AdminRecentLoginsView() {
               </button>
             )}
           </div>
+
+          {/* Manual Refresh Button */}
+          <button
+            type="button"
+            className="taskflow-btn-secondary"
+            onClick={() => setRetry((v) => v + 1)}
+            title="Refresh attendance records"
+            aria-label="Refresh attendance records"
+            style={{ padding: "0.5rem 0.75rem" }}
+          >
+            <RotateCcw size={14} />
+          </button>
+
+          {/* Toggle Self-Service Widget for Admin/Manager */}
+          {(user?.role === "admin" || user?.role === "manager") && !showMyWidget && (
+            <button
+              type="button"
+              className="taskflow-btn-secondary"
+              onClick={() => setShowMyWidget(true)}
+              style={{ fontSize: "0.82rem", padding: "0.5rem 0.85rem" }}
+            >
+              My Check-In
+            </button>
+          )}
         </div>
       </header>
 
-      {/* Pill: Recent activity · Latest first */}
+      {/* Pill: Recent activity · Live sync */}
       <div className="admin-att-tagline">
-        <span className="tag-green">Recent activity</span>
+        <span className="tag-green">Live activity</span>
         <span className="tag-dot">·</span>
-        <span className="tag-gray">Latest first</span>
+        <span className="tag-gray">Newest logins first</span>
+        <span className="tag-dot">·</span>
+        <span style={{ fontSize: "0.78rem", color: "#64748b" }}>
+          {logins.length} {logins.length === 1 ? "staff record" : "staff records"}
+        </span>
       </div>
 
       {/* Error alert */}
@@ -364,32 +669,35 @@ function AdminRecentLoginsView() {
         </div>
       )}
 
-      {/* Card Table matching reference */}
+      {/* 9-Column Real-time Table */}
       <div className="admin-att-card">
         {loading ? (
           <div style={{ padding: "50px 24px", textAlign: "center", color: "#64748b" }}>
             <p style={{ margin: 0, fontWeight: 650, fontSize: "0.92rem" }}>
-              Loading recent login activity...
+              Loading real-time attendance records...
             </p>
           </div>
         ) : logins.length === 0 ? (
           <div className="attendance-empty-state">
             <Clock size={36} style={{ color: "#94a3b8", marginBottom: 8 }} />
-            <h3>No employee or intern login records found</h3>
+            <h3>No staff login records found</h3>
             <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748b" }}>
               {searchQuery
                 ? `No staff record matches "${searchQuery}".`
+                : statusFilter !== "All"
+                ? `No staff members currently in "${statusFilter}" status.`
                 : dateMode !== "all"
                 ? "No logins recorded for the selected date."
-                : "No employee or intern accounts found in workspace."}
+                : "No staff accounts found in workspace."}
             </p>
-            {(searchQuery || dateMode !== "all") && (
+            {(searchQuery || statusFilter !== "All" || dateMode !== "all") && (
               <button
                 type="button"
                 className="taskflow-btn-secondary"
                 style={{ marginTop: 12, fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}
                 onClick={() => {
                   setSearchQuery("");
+                  setStatusFilter("All");
                   setDateMode("all");
                 }}
               >
@@ -406,17 +714,26 @@ function AdminRecentLoginsView() {
                   <th>Staff ID</th>
                   <th>Role</th>
                   <th>Department</th>
-                  <th>Last Login</th>
-                  <th>Login Status</th>
+                  <th>Login Time</th>
+                  <th>Current Status</th>
+                  <th>Session Duration</th>
+                  <th>Break Duration</th>
+                  <th>Last Activity</th>
                 </tr>
               </thead>
               <tbody>
                 {logins.map((item) => {
                   const meta = formatLoginTimestamp(item.last_login);
-                  const isIntern = item.role === "intern";
+                  const roleBadge = getRoleBadge(item.role);
+                  const sessionDurStr = getLiveSessionDuration(item, nowMs);
+                  const breakDurStr = getLiveBreakDuration(item, nowMs);
+                  const lastAct = getLiveLastActivity(item, nowMs);
+                  const isSessionActive = item.current_status === "Online" || item.current_status === "On Break";
+                  const isOnBreak = item.current_status === "On Break";
+
                   return (
                     <tr key={item.user_id}>
-                      {/* Name & profile photo */}
+                      {/* 1. Name & Avatar */}
                       <td>
                         <div className="admin-att-user-cell">
                           {item.profile_photo ? (
@@ -441,37 +758,35 @@ function AdminRecentLoginsView() {
                         </div>
                       </td>
 
-                      {/* Staff ID */}
+                      {/* 2. Staff ID */}
                       <td>
                         <span className="admin-att-staff-id">{item.staff_id || "—"}</span>
                       </td>
 
-                      {/* Role */}
+                      {/* 3. Role */}
                       <td>
-                        <span className={`admin-att-role-pill ${isIntern ? "intern" : "employee"}`}>
-                          {isIntern ? "Intern" : "Employee"}
+                        <span className={`admin-att-role-pill ${roleBadge.className}`}>
+                          {roleBadge.label}
                         </span>
                       </td>
 
-                      {/* Department */}
+                      {/* 4. Department */}
                       <td>
                         <span className="admin-att-dept">{item.department || "Ingage"}</span>
                       </td>
 
-                      {/* Last Login */}
+                      {/* 5. Login Time */}
                       <td>
                         <div className="admin-att-login-cell">
                           <span className="admin-att-login-time">{meta.display}</span>
                           <span
                             className={`admin-att-login-sub ${
-                              meta.isToday && item.login_status === "Logged in" ? "green" : ""
+                              meta.isToday && isSessionActive ? "green" : ""
                             }`}
                           >
                             <span
                               className={`sub-dot ${
-                                meta.isToday && item.login_status === "Logged in"
-                                  ? "green"
-                                  : "gray"
+                                meta.isToday && isSessionActive ? "green" : "gray"
                               }`}
                             />
                             <span>{meta.sub}</span>
@@ -479,23 +794,32 @@ function AdminRecentLoginsView() {
                         </div>
                       </td>
 
-                      {/* Login Status */}
+                      {/* 6. Current Status */}
                       <td>
-                        {item.login_status === "Logged in" ? (
-                          <span className="admin-att-status-pill logged-in">
-                            <span className="dot" />
-                            <span>Logged in</span>
-                          </span>
-                        ) : item.login_status === "Last session" ? (
-                          <span className="admin-att-status-pill last-session">
-                            <span className="dot" />
-                            <span>Last session</span>
-                          </span>
-                        ) : (
-                          <span className="admin-att-status-pill never-logged-in">
-                            <span>Never logged in</span>
-                          </span>
-                        )}
+                        {renderStatusBadge(item.current_status)}
+                      </td>
+
+                      {/* 7. Session Duration (Ticking live) */}
+                      <td>
+                        <span className={`admin-att-duration-cell ${isSessionActive ? "active" : ""}`}>
+                          {isSessionActive && <Timer size={12} style={{ color: "#16a34a" }} />}
+                          <span>{sessionDurStr}</span>
+                        </span>
+                      </td>
+
+                      {/* 8. Break Duration (Ticking live when on break) */}
+                      <td>
+                        <span className={`admin-att-duration-cell ${isOnBreak ? "break-active" : ""}`}>
+                          {isOnBreak && <Coffee size={12} style={{ color: "#d97706" }} />}
+                          <span>{breakDurStr}</span>
+                        </span>
+                      </td>
+
+                      {/* 9. Last Activity */}
+                      <td>
+                        <span className={`admin-att-activity-cell ${lastAct.isRecent ? "recent" : ""}`}>
+                          {lastAct.text}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -509,15 +833,7 @@ function AdminRecentLoginsView() {
   );
 }
 
-export default function AttendancePage() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const isManager = user?.role === "manager";
-
-  if (isAdmin) {
-    return <AdminRecentLoginsView />;
-  }
-
+function HistoricalAttendanceViews() {
   const todayStr = new Date().toISOString().split("T")[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [activeTab, setActiveTab] = useState("daily"); // 'daily', 'monthly', 'corrections', 'policy'
@@ -1672,3 +1988,66 @@ export default function AttendancePage() {
     </div>
   );
 }
+
+export default function AttendancePage() {
+  const { user } = useAuth();
+  const [viewMode, setViewMode] = useState("realtime"); // 'realtime' or 'historical'
+
+  return (
+    <div>
+      {(user?.role === "admin" || user?.role === "manager") && (
+        <div
+          style={{
+            maxWidth: 1440,
+            margin: "18px auto 0",
+            padding: "0 32px",
+            display: "flex",
+            gap: 10,
+          }}
+        >
+          <button
+            type="button"
+            className={`admin-att-date-option ${viewMode === "realtime" ? "active" : ""}`}
+            style={{
+              padding: "6px 16px",
+              borderRadius: 8,
+              border: viewMode === "realtime" ? "1px solid #16a34a" : "1px solid #cbd5e1",
+              fontWeight: 700,
+              fontSize: "0.84rem",
+              background: viewMode === "realtime" ? "#f0fdf4" : "#ffffff",
+              color: viewMode === "realtime" ? "#166534" : "#475569",
+              cursor: "pointer",
+            }}
+            onClick={() => setViewMode("realtime")}
+          >
+            Live Attendance & Breaks
+          </button>
+          <button
+            type="button"
+            className={`admin-att-date-option ${viewMode === "historical" ? "active" : ""}`}
+            style={{
+              padding: "6px 16px",
+              borderRadius: 8,
+              border: viewMode === "historical" ? "1px solid #16a34a" : "1px solid #cbd5e1",
+              fontWeight: 700,
+              fontSize: "0.84rem",
+              background: viewMode === "historical" ? "#f0fdf4" : "#ffffff",
+              color: viewMode === "historical" ? "#166534" : "#475569",
+              cursor: "pointer",
+            }}
+            onClick={() => setViewMode("historical")}
+          >
+            Historical Logs & Reports
+          </button>
+        </div>
+      )}
+
+      {viewMode === "realtime" ? (
+        <RealtimeAttendanceView user={user} />
+      ) : (
+        <HistoricalAttendanceViews />
+      )}
+    </div>
+  );
+}
+

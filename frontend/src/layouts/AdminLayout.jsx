@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import AdminSidebar from "../components/AdminSidebar";
 import NotificationBell from "../components/NotificationBell.jsx";
 import { useAuth } from "../context/useAuth.js";
@@ -16,6 +16,7 @@ const routeTitles = {
   "/admin/tasks/assign": "Team Tasks",
   "/admin/attendance": "Attendance & Breaks",
   "/admin/notifications": "Notifications",
+  "/admin/profile": "My Profile",
   "/admin/reports": "Reports & Analytics",
   "/admin/settings": "Settings",
 };
@@ -73,7 +74,12 @@ export default function AdminLayout() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "16px", marginLeft: "auto" }}>
             <NotificationBell />
-            <div className="admin-user-identity">
+            <Link
+              to={user?.role === "manager" ? "/manager/profile" : "/admin/profile"}
+              className="admin-user-identity"
+              style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
+              title="My Profile"
+            >
               <span className="admin-user-avatar" aria-hidden="true">
                 {(user?.full_name || "A").trim().charAt(0).toUpperCase()}
               </span>
@@ -81,7 +87,7 @@ export default function AdminLayout() {
                 <strong>{user?.full_name || "Administrator"}</strong>
                 <small>{user?.role === "manager" ? "Manager" : "Administrator"}</small>
               </span>
-            </div>
+            </Link>
           </div>
         </header>
         <main className="admin-content">

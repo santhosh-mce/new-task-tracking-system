@@ -200,6 +200,13 @@ class RecentLoginStaffItem(BaseModel):
     department: str | None = "Ingage"
     profile_photo: str | None = None
     last_login: datetime | None = None
-    login_status: str  # "Logged in", "Last session", "Never logged in"
+    login_status: str  # "Online", "On Break", "Offline", "Never Logged In"
+    current_status: str = "Offline"
+    session_duration_seconds: int = 0
+    break_duration_seconds: int = 0
+    working_duration_seconds: int = 0
+    last_activity: datetime | None = None
     is_active_session: bool = False
+    is_on_break: bool = False
+    active_break_start: datetime | None = None
     source: str | None = None
