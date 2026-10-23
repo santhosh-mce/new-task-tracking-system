@@ -1814,25 +1814,6 @@ export default function CompleteProfilePage() {
               </div>
             </div>
           )}
-
-          {/* Sticky Bottom Actions Bar */}
-          <div className="profile-sticky-footer">
-            <div className="profile-footer-inner">
-              <div className="profile-footer-status">
-                <span>Required: Full Name *, Phone *, Department *, Highest Qualification *, Technical Skills *.</span>
-              </div>
-              <div className="profile-footer-actions">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="profile-btn-primary"
-                >
-                  <Save size={16} />
-                  {submitting ? "Saving Profile..." : isProfileComplete ? "Update Profile" : "Save & Complete Profile"}
-                </button>
-              </div>
-            </div>
-          </div>
         </form>
       </div>
     </div>
